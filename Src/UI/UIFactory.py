@@ -2,9 +2,15 @@ from PyQt5.QtWidgets import (
     QGroupBox, QGridLayout, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox,
     QDoubleSpinBox, QCheckBox, QTextEdit, QSlider,
-    QListWidget, QGroupBox
+    QListWidget, QGroupBox, QWidget
 )
 from PyQt5.QtCore import Qt, QSize
+
+try:
+    from PyQt5.QtWebEngineWidgets import QWebEngineView
+    WEBENGINE_AVAILABLE = True
+except ImportError:
+    WEBENGINE_AVAILABLE = False
 
 class UIFactory:
     """UI工厂类 - 负责创建所有UI组件"""
@@ -233,7 +239,11 @@ class UIFactory:
         layout.addWidget(self.main_window.label_affirmation_text, 1, 0)
         self.main_window.affirmation_text = QLineEdit()
         self.main_window.affirmation_text.setToolTip(self.main_window.tr("输入肯定语。"))
-        layout.addWidget(self.main_window.affirmation_text, 1, 1, 1, 2)
+        layout.addWidget(self.main_window.affirmation_text, 1, 1)
+        self.main_window.btn_edit_affirmation = QPushButton(self.main_window.tr("编辑..."))
+        self.main_window.btn_edit_affirmation.setToolTip(self.main_window.tr("打开更大的编辑框编辑肯定语"))
+        self.main_window.btn_edit_affirmation.clicked.connect(self.main_window.open_affirmation_editor)
+        layout.addWidget(self.main_window.btn_edit_affirmation, 1, 2)
 
         # 文本文件选择
         self.main_window.label_text_file = QLabel(self.main_window.tr("文本文件:"))
@@ -242,12 +252,21 @@ class UIFactory:
         self.main_window.text_file.setToolTip(self.main_window.tr("选择一个文本文件作为肯定语。"))
         layout.addWidget(self.main_window.text_file, 2, 1)
 
+        # 文本文件按钮组（浏览 + 打开）
+        text_file_btn_layout = QHBoxLayout()
+        text_file_btn_layout.setSpacing(5)
         self.main_window.btn_browse_text = QPushButton(self.main_window.tr("浏览..."))
         self.main_window.btn_browse_text.clicked.connect(
             lambda: self.main_window.browse_file(self.main_window.text_file,
                                                self.main_window.tr("文本文件 (*.txt)")))
         self.main_window.btn_browse_text.setToolTip(self.main_window.tr("选择文本文件"))
-        layout.addWidget(self.main_window.btn_browse_text, 2, 2)
+        text_file_btn_layout.addWidget(self.main_window.btn_browse_text)
+
+        self.main_window.btn_open_text = QPushButton(self.main_window.tr("打开"))
+        self.main_window.btn_open_text.setToolTip(self.main_window.tr("用系统默认程序打开文本文件"))
+        self.main_window.btn_open_text.clicked.connect(self.main_window.open_text_file_with_default_app)
+        text_file_btn_layout.addWidget(self.main_window.btn_open_text)
+        layout.addLayout(text_file_btn_layout, 2, 2)
 
         # TTS引擎选择
         self.main_window.label_tts_engine = QLabel(self.main_window.tr("TTS引擎:"))
@@ -671,24 +690,30 @@ class UIFactory:
         # self.main_window.preview_layout.setSpacing(10)
         # self.main_window.preview_layout.setContentsMargins(10, 10, 10, 10)
         #
-        # # 轨道标签
-        # self.main_window.preview_tracks_label = QLabel(self.main_window.tr('轨道预览（点击"更新预览"查看）'))
-        # self.main_window.preview_tracks_label.setAlignment(Qt.AlignCenter)
-        # self.main_window.preview_tracks_label.setStyleSheet("color: #666; font-size: 12px;")
-        # self.main_window.preview_layout.addWidget(self.main_window.preview_tracks_label)
-        #
-        # self.main_window.preview_scroll.setWidget(self.main_window.preview_widget)
-        # preview_layout.addWidget(self.main_window.preview_scroll)
-        #
-        # # 缩放比例显示
-        # self.main_window.preview_zoom_label = QLabel(self.main_window.tr("缩放: 100%"))
-        # self.main_window.preview_zoom_label.setAlignment(Qt.AlignRight)
-        # preview_layout.addWidget(self.main_window.preview_zoom_label)
-        #
-        # self.main_window.preview_group.setLayout(preview_layout)
-        # layout.addWidget(self.main_window.preview_group, row, 0, 1, 3)
-        #
-        # row += 1
+        # Web预览组
+        self.main_window.preview_group = QGroupBox(self.main_window.tr("输出预览"))
+        preview_layout = QVBoxLayout()
+        preview_layout.setSpacing(5)
+        preview_layout.setContentsMargins(5, 5, 5, 5)
+
+        if WEBENGINE_AVAILABLE:
+            # 使用QWebEngineView显示Web预览
+            self.main_window.preview_webview = QWebEngineView()
+            self.main_window.preview_webview.setMinimumHeight(200)
+            self.main_window.preview_webview.setMaximumHeight(300)
+            preview_layout.addWidget(self.main_window.preview_webview)
+        else:
+            # 如果WebEngine不可用，显示提示信息
+            preview_placeholder = QLabel(self.main_window.tr("⚠️ PyQtWebEngine 不可用"))
+            preview_placeholder.setAlignment(Qt.AlignCenter)
+            preview_placeholder.setStyleSheet("color: #999; padding: 20px;")
+            preview_layout.addWidget(preview_placeholder)
+            self.main_window.preview_webview = None
+
+        self.main_window.preview_group.setLayout(preview_layout)
+        layout.addWidget(self.main_window.preview_group, row, 0, 1, 3)
+
+        row += 1
 
         # 生成按钮
         self.main_window.generate_btn = QPushButton(self.main_window.tr("生成项目"))
@@ -732,6 +757,12 @@ class UIFactory:
         self.main_window.reset_settings_btn = QPushButton(self.main_window.tr("重置设置"))
         self.main_window.reset_settings_btn.clicked.connect(self.main_window.reset_settings)
         layout.addWidget(self.main_window.reset_settings_btn, 1, 0, 1, 3)
+
+        # 检查更新按钮
+        self.main_window.check_update_btn = QPushButton(self.main_window.tr("检查更新"))
+        self.main_window.check_update_btn.setToolTip(self.main_window.tr("检查是否有新版本可用"))
+        self.main_window.check_update_btn.clicked.connect(self.main_window.check_for_updates)
+        layout.addWidget(self.main_window.check_update_btn, 2, 0, 1, 3)
 
         # 关于信息
         self.main_window.about_group = QGroupBox(self.main_window.tr("关于"))
@@ -805,7 +836,7 @@ class UIFactory:
         about_layout.addWidget(self.main_window.contact_label)
 
         self.main_window.about_group.setLayout(about_layout)
-        layout.addWidget(self.main_window.about_group, 2, 0, 1, 3)
+        layout.addWidget(self.main_window.about_group, 3, 0, 1, 3)
 
         self.main_window.settings_group.setLayout(layout)
         return self.main_window.settings_group
